@@ -24,29 +24,68 @@ library(nycflights13)
 Make a plot with three facets, one for each airport in the weather data.  The x-axis should be the day of the year (1:365) and the y-axis should be the mean temperature recorded on that day, at that airport.
 ```{r}
 library(lubridate)
-weather %>% mutate(day_of_year = yday(time_hour))
+weather %>% mutate(day_of_year = yday(time_hour)) %>% 
+  group_by(origin,day_of_year) %>% 
+  summarise(avetemp=mean(temp)) %>% 
+  ggplot() + 
+  geom_point(mapping = aes(x = day_of_year, y = avetemp)) + 
+  facet_wrap(~ origin)
 ```
 
 
 Make a non-tidy matrix of that data where each row is an airport and each column is a day of the year.  
 
 ```{r}
-
+weather %>% mutate(day_of_year = yday(time_hour)) %>% 
+  group_by(origin,day_of_year) %>% 
+  summarise(avetemp=mean(temp)) %>% 
+  pivot_wider(names_from = day_of_year, values_from = avetemp)
 ```
 
 
 For each (airport, day) contruct a tidy data set of the airport's "performance" as the proportion of flights that departed less than an hour late. 
 ```{r}
+df=flights %>% 
+  group_by(origin,day) %>% 
+  filter(!is.na(origin),!is.na(day),!is.na(dep_delay)) %>% 
+  count(dep_delay<60) 
+names(df)[3]="iff"
+newdf=df %>% pivot_wider(names_from = iff,values_from=n) 
+names(newdf)[3]="notontime"
+names(newdf)[4]="ontime"
+newdf=newdf %>% mutate(performance=(ontime)/(ontime+notontime))
+newdf
+ 
 ```
 
 Construct a tidy data set to that give weather summaries for each (airport, day).  Use the total precipitation, minimum visibility, maximum wind_gust, and average wind_speed.  
 ```{r}
+newweather=weather %>% group_by(origin,day) %>% 
+  filter(!is.na(wind_gust))%>% 
+  summarise(total_precipitation=sum(precip),minimum_visibility=min(visib),maximum_wind_gust=max(wind_gust),average_wind_speed=mean(wind_speed))
+newweather
+
 ```
 
 Construct a linear model to predict the performance of each (airport,day) using the weather summaries and a "fixed effect" for each airport.  Display the summaries.  
 ```{r}
+newdf %>% left_join(newweather) %>% 
+  ggplot(mapping = aes(x=maximum_wind_gust,y=performance))+
+  geom_point()+
+  geom_smooth(method="lm")
+data = left_join(newdf, newweather)
+fit = lm(performance ~ origin+total_precipitation+minimum_visibility+maximum_wind_gust, data = data)
+summary(fit)
 ```
 
 Repeat the above, but only for EWR.  Obviously, exclude the fixed effect for each airport.
 ```{r}
+newdf %>% left_join(newweather) %>% 
+  filter(origin=="EWR") %>% 
+  ggplot(mapping = aes(x=average_wind_speed,y=performance))+
+  geom_point()+
+  geom_smooth(method="lm")
+dataEWR = filter(data, origin == "EWR")
+fitEWR = lm(performance ~ total_precipitation+minimum_visibility+maximum_wind_gust, data = dataEWR)
+summary(fitEWR)
 ```
